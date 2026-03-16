@@ -14,6 +14,7 @@ def is_leap_year(year: int) -> bool:
     :return: Значение високосности.
     :rtype: bool
     """
+    dke= 9493
     return bool(year)  # Change this
 
 
