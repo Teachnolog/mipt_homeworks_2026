@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from collections import defaultdict
 from typing import Any
 
 DAY_MIN = 1
@@ -209,12 +208,12 @@ def month_categories(
     year: int,
     month: int,
 ) -> dict[str, float]:
-    result: dict[str, float] = defaultdict(float)
+    result: dict[str, float] = {}
     for t in transactions:
         if KEY_CATEGORY in t and is_in_month(t, year, month):
             full_category = t[KEY_CATEGORY]
-            result[full_category] += t[KEY_AMOUNT]
-    return dict(result)
+            result[full_category] = result.get(full_category, 0) + t[KEY_AMOUNT]
+    return result
 
 
 def total_capital(transactions: list[dict[str, Any]]) -> float:
@@ -227,19 +226,32 @@ def total_capital(transactions: list[dict[str, Any]]) -> float:
     return float(total)
 
 
+def format_number(val: float) -> str:
+    s = f"{val:.2f}"
+    if "." in s:
+        integer_part, fractional_part = s.split(".")
+        fractional_part = fractional_part.rstrip("0")
+        if fractional_part == "":
+            return f"{integer_part}.0"
+        return f"{integer_part}.{fractional_part}"
+    return s
+
+
 def format_currency(val: float) -> str:
-    return f"{val:.2f}"
+    return format_number(val)
 
 
 def format_category_amount(val: float) -> str:
-    return f"{int(val):,}" if val.is_integer() else f"{val:.2f}"
+    if val.is_integer():
+        return f"{int(val)}.0"
+    return repr(val)
 
 
 def format_details(categories: dict[str, float]) -> list[str]:
     if not categories:
         return ["Details (category: amount):"]
     lines = ["Details (category: amount):"]
-    for idx, (cat, amt) in enumerate(categories.items()):   # index from 0
+    for idx, (cat, amt) in enumerate(categories.items()):
         lines.append(f"{idx}. {cat}: {format_category_amount(amt)}")
     return lines
 
@@ -249,9 +261,9 @@ def build_stats_message(report_date: str, stats: dict[str, Any]) -> str:
         f"Your statistics as of {report_date}:",
         f"Total capital: {format_currency(stats['total_capital'])} rubles",
     ]
-    total_cap = stats["total_capital"]
-    profit_word = "profit" if total_cap >= 0 else "loss"
-    lines.append(f"This month, the {profit_word} amounted to {format_currency(abs(total_cap))} rubles.")
+    delta = stats["month_income"] - stats["month_expenses"]
+    profit_word = "profit" if delta >= 0 else "loss"
+    lines.append(f"This month, the {profit_word} amounted to {format_currency(delta)} rubles.")
     lines.append(f"Income: {format_currency(stats['month_income'])} rubles")
     lines.append(f"Expenses: {format_currency(stats['month_expenses'])} rubles")
     lines.append("")
@@ -276,14 +288,41 @@ def stats_handler(report_date: str) -> str:
     return build_stats_message(report_date, stats)
 
 
+def is_valid_number_str(s: str) -> bool:
+    if s.count(".") > 1:
+        return False
+    if s in {"", "."}:
+        return False
+    return all(ch == "." or ch.isdigit() for ch in s)
+
+
+def parse_amount(s: str) -> float | None:
+    s = s.strip()
+    if not s:
+        return None
+    sign = 1
+    if s[0] in "+-":
+        if len(s) == 1:
+            return None
+        if s[0] == "-":
+            sign = -1
+        s = s[1:]
+    s = s.replace(",", ".")
+    if not is_valid_number_str(s):
+        return None
+    return sign * float(s)
+
+
 def process_income(args: list[str]) -> None:
     if len(args) != INCOME_ARGS:
         print(UNKNOWN_COMMAND_MSG)
         return
-    try:
-        amount = float(args[1].replace(",", "."))
-    except ValueError:
-        print(UNKNOWN_COMMAND_MSG)
+    amount = parse_amount(args[1])
+    if amount is None or amount <= 0:
+        if amount is None:
+            print(UNKNOWN_COMMAND_MSG)
+        else:
+            print(NONPOSITIVE_VALUE_MSG)
         return
     result = income_handler(amount, args[2])
     print(result)
@@ -296,10 +335,12 @@ def process_cost(args: list[str]) -> None:
     if len(args) != COST_ARGS:
         print(UNKNOWN_COMMAND_MSG)
         return
-    try:
-        amount = float(args[2].replace(",", "."))
-    except ValueError:
-        print(UNKNOWN_COMMAND_MSG)
+    amount = parse_amount(args[2])
+    if amount is None or amount <= 0:
+        if amount is None:
+            print(UNKNOWN_COMMAND_MSG)
+        else:
+            print(NONPOSITIVE_VALUE_MSG)
         return
     result = cost_handler(args[1], amount, args[3])
     print(result)
