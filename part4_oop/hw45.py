@@ -38,7 +38,7 @@ class FIFOPolicy(Policy[K]):
             self._order.append(key)
 
     def get_key_to_evict(self) -> K | None:
-        if len(self._order) >= self.capacity:
+        if len(self._order) > self.capacity:
             return self._order[0]
         return None
 
@@ -65,7 +65,7 @@ class LRUPolicy(Policy[K]):
         self._order.append(key)
 
     def get_key_to_evict(self) -> K | None:
-        if len(self._order) >= self.capacity:
+        if len(self._order) > self.capacity:
             return self._order[0]
         return None
 
@@ -85,54 +85,49 @@ class LRUPolicy(Policy[K]):
 class LFUPolicy(Policy[K]):
     capacity: int = 5
     _key_counter: dict[K, int] = field(default_factory=dict, init=False)
-    _order: list[K] = field(default_factory=list, init=False)
+    _last_key: K | None = field(default=None, init=False)
 
     @property
     def has_keys(self) -> bool:
-        return len(self._key_counter) > 0
+        return bool(self._key_counter)
 
     def register_access(self, key: K) -> None:
-        current = self._key_counter.get(key, 0)
-        self._key_counter[key] = current + 1
-        if current == 0:
-            self._order.append(key)
+        count = self._key_counter.get(key, 0)
+        self._key_counter[key] = count + 1
+        if count == 0:
+            self._last_key = key
 
     def get_key_to_evict(self) -> K | None:
-        if len(self._key_counter) < self.capacity:
+        if len(self._key_counter) <= self.capacity:
             return None
 
-        min_keys = self._get_keys_with_min_freq()
-        is_over = len(self._key_counter) > self.capacity
-        only_one = len(min_keys) == 1
-        is_last = only_one and min_keys[0] == self._order[-1]
-        if is_over and is_last:
-            return self._get_second_min_key(min_keys[0])
+        min_freq = min(self._key_counter.values())
+        min_keys = [k for k, v in self._key_counter.items() if v == min_freq]
+
+        if len(min_keys) == 1 and min_keys[0] == self._last_key:
+            second = self._second_min_freq(self._last_key)
+            for k, v in self._key_counter.items():
+                if k != self._last_key and v == second:
+                    return k
         return min_keys[0]
 
     def remove_key(self, key: K) -> None:
-        if key in self._key_counter:
-            self._key_counter.pop(key, None)
-            self._order.remove(key)
+        self._key_counter.pop(key, None)
+        if self._last_key == key:
+            self._last_key = None
 
     def clear(self) -> None:
         self._key_counter.clear()
-        self._order.clear()
+        self._last_key = None
 
-    def _get_keys_with_min_freq(self) -> list[K]:
-        min_count = min(self._key_counter.values())
-        return [k for k in self._order if self._key_counter[k] == min_count]
-
-    def _get_second_min_key(self, excluded_key: K) -> K | None:
-        best_key = None
-        best_freq = None
-        for key in self._order:
-            if key == excluded_key:
+    def _second_min_freq(self, exclude: K) -> int | None:
+        second = None
+        for k, v in self._key_counter.items():
+            if k == exclude:
                 continue
-            freq = self._key_counter[key]
-            if best_freq is None or freq < best_freq:
-                best_freq = freq
-                best_key = key
-        return best_key
+            if second is None or v < second:
+                second = v
+        return second
 
 
 class MIPTCache(Cache[K, V]):
@@ -141,8 +136,9 @@ class MIPTCache(Cache[K, V]):
         self.policy = policy
 
     def set(self, key: K, value: V) -> None:
+        self.policy.register_access(key)
+
         if self.storage.exists(key):
-            self.policy.register_access(key)
             self.storage.set(key, value)
             return
 
@@ -151,7 +147,6 @@ class MIPTCache(Cache[K, V]):
             self.storage.remove(evict)
             self.policy.remove_key(evict)
 
-        self.policy.register_access(key)
         self.storage.set(key, value)
 
     def get(self, key: K) -> V | None:
@@ -185,9 +180,8 @@ class CachedProperty:
             return self
         cache = instance.cache
         key = self.attr_name
-        cached = cache.get(key)
-        if cached is not None:
-            return cached
+        if cache.exists(key):
+            return cache.get(key)
         value = self.func(instance)
         cache.set(key, value)
         return value
