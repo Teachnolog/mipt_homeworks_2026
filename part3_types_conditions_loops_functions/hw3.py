@@ -70,14 +70,7 @@ def days_in_month(month: int, year: int) -> int:
 
 
 def parse_int(s: str) -> int | None:
-    if not s:
-        return None
-    if s[0] in "+-":
-        if len(s) == 1:
-            return None
-        if not s[1:].isdigit():
-            return None
-    elif not s.isdigit():
+    if not s.isdigit():
         return None
     return int(s)
 
