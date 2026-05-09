@@ -96,7 +96,7 @@ def extract_date(maybe_dt: str) -> tuple[int, int, int] | None:
 
     if not (MONTH_MIN <= month <= MONTH_MAX):
         return None
-    if not (1 <= day <= days_in_month(month, year)):
+    if not (DAY_MIN <= day <= days_in_month(month, year)):
         return None
     return day, month, year
 
@@ -230,35 +230,29 @@ def format_number(val: float) -> str:
     return s
 
 
-def format_currency(val: float) -> str:
-    return format_number(val)
-
-
 def format_category_amount(val: float) -> str:
     if val.is_integer():
         return f"{int(val)}.0"
-    return repr(val)
+    return str(val)
 
 
 def format_details(categories: dict[str, float]) -> list[str]:
-    if not categories:
-        return ["Details (category: amount):"]
     lines = ["Details (category: amount):"]
-    for idx, (cat, amt) in enumerate(categories.items()):
-        lines.append(f"{idx}. {cat}: {format_category_amount(amt)}")
+    for index, (category, amount) in enumerate(categories.items()):
+        lines.append(f"{index}. {category}: {format_category_amount(amount)}")
     return lines
 
 
 def build_stats_message(report_date: str, stats: dict[str, Any]) -> str:
     lines = [
         f"Your statistics as of {report_date}:",
-        f"Total capital: {format_currency(stats['total_capital'])} rubles",
+        f"Total capital: {format_number(stats['total_capital'])} rubles",
     ]
     delta = stats["month_income"] - stats["month_expenses"]
     profit_word = "profit" if delta >= 0 else "loss"
-    lines.append(f"This month, the {profit_word} amounted to {format_currency(delta)} rubles.")
-    lines.append(f"Income: {format_currency(stats['month_income'])} rubles")
-    lines.append(f"Expenses: {format_currency(stats['month_expenses'])} rubles")
+    lines.append(f"This month, the {profit_word} amounted to {format_number(delta)} rubles.")
+    lines.append(f"Income: {format_number(stats['month_income'])} rubles")
+    lines.append(f"Expenses: {format_number(stats['month_expenses'])} rubles")
     lines.append("")
     lines.extend(format_details(stats.get(KEY_STATS_CATEGORIES, {})))
     return "\n".join([*lines, ""])
@@ -311,11 +305,11 @@ def process_income(args: list[str]) -> None:
         print(UNKNOWN_COMMAND_MSG)
         return
     amount = parse_amount(args[1])
-    if amount is None or amount <= 0:
-        if amount is None:
-            print(UNKNOWN_COMMAND_MSG)
-        else:
-            print(NONPOSITIVE_VALUE_MSG)
+    if amount is None:
+        print(UNKNOWN_COMMAND_MSG)
+        return
+    if amount <= 0:
+        print(NONPOSITIVE_VALUE_MSG)
         return
     result = income_handler(amount, args[2])
     print(result)
@@ -329,11 +323,11 @@ def process_cost(args: list[str]) -> None:
         print(UNKNOWN_COMMAND_MSG)
         return
     amount = parse_amount(args[2])
-    if amount is None or amount <= 0:
-        if amount is None:
-            print(UNKNOWN_COMMAND_MSG)
-        else:
-            print(NONPOSITIVE_VALUE_MSG)
+    if amount is None:
+        print(UNKNOWN_COMMAND_MSG)
+        return
+    if amount <= 0:
+        print(NONPOSITIVE_VALUE_MSG)
         return
     result = cost_handler(args[1], amount, args[3])
     print(result)
