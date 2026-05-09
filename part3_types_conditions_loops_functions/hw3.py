@@ -134,9 +134,7 @@ def cost_handler(category_name: str, amount: float, cost_date: str) -> str:
     if not validate_category(category_name):
         financial_transactions_storage.append({})
         return NOT_EXISTS_CATEGORY
-    financial_transactions_storage.append(
-        {KEY_CATEGORY: category_name, KEY_AMOUNT: amount, KEY_DATE: date_tuple}
-    )
+    financial_transactions_storage.append({KEY_CATEGORY: category_name, KEY_AMOUNT: amount, KEY_DATE: date_tuple})
     return OP_SUCCESS_MSG
 
 
@@ -183,17 +181,19 @@ def is_in_month(transaction: dict[str, Any], target_year: int, target_month: int
 
 
 def month_income(transactions: list[dict[str, Any]], year: int, month: int) -> float:
-    return float(sum(
-        t[KEY_AMOUNT] for t in transactions
-        if KEY_CATEGORY not in t and is_in_month(t, year, month)
-    ))
+    total = 0
+    for t in transactions:
+        if KEY_CATEGORY not in t and is_in_month(t, year, month):
+            total += t[KEY_AMOUNT]
+    return total
 
 
 def month_expenses(transactions: list[dict[str, Any]], year: int, month: int) -> float:
-    return float(sum(
-        t[KEY_AMOUNT] for t in transactions
-        if KEY_CATEGORY in t and is_in_month(t, year, month)
-    ))
+    total = 0
+    for t in transactions:
+        if KEY_CATEGORY in t and is_in_month(t, year, month):
+            total += t[KEY_AMOUNT]
+    return total
 
 
 def month_categories(
