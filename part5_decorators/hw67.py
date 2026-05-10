@@ -1,7 +1,7 @@
 import json
 from datetime import UTC, datetime, timedelta
 from functools import wraps
-from typing import Any, NoReturn, ParamSpec, Protocol, TypeVar
+from typing import Any, ParamSpec, Protocol, TypeVar
 from urllib.request import urlopen
 
 INVALID_CRITICAL_COUNT = "Breaker count must be positive integer!"
@@ -62,11 +62,11 @@ class CircuitBreaker:
 
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_co:
-            self.check_blocked_state(state, func)
+            self.__check_blocked_state(state, func)
             try:
                 result = func(*args, **kwargs)
             except Exception as e:
-                self.handle_exception(state, e, func)
+                self.__handle_exception(state, e, func)
                 raise
             else:
                 state[KEY_FAILURES] = 0
@@ -74,7 +74,7 @@ class CircuitBreaker:
 
         return wrapper
 
-    def check_blocked_state(self, state: dict[str, Any], func: Any) -> None:
+    def __check_blocked_state(self, state: dict[str, Any], func: Any) -> None:
         block_until = state[KEY_BLOCK_UNTIL]
         if block_until is None:
             return
@@ -93,15 +93,14 @@ class CircuitBreaker:
         state[KEY_BLOCK_START] = None
         state[KEY_FAILURES] = 0
 
-    def handle_exception(
+    def __handle_exception(
         self,
         state: dict[str, Any],
         exception: Exception,
         func: Any,
-    ) -> NoReturn:
+    ) -> None:
         if not isinstance(exception, self.triggers_on):
-            raise exception
-
+            return
         state[KEY_FAILURES] += 1
         if state[KEY_FAILURES] >= self.critical_count:
             block_start = datetime.now(UTC)
@@ -112,7 +111,6 @@ class CircuitBreaker:
                 block_time=block_start,
                 cause=exception,
             ) from exception
-        raise exception
 
 
 circuit_breaker = CircuitBreaker(5, 30, Exception)
