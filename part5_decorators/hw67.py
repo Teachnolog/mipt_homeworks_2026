@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import Any, ParamSpec, Protocol, TypeVar
@@ -9,10 +10,6 @@ INVALID_RECOVERY_TIME = "Breaker recovery time must be positive integer!"
 VALIDATIONS_FAILED = "Invalid decorator args."
 TOO_MUCH = "Too much requests, just wait."
 INTERNAL_ERROR_MSG = "Internal circuit breaker error"
-
-KEY_FAILURES = "failures"
-KEY_BLOCK_START = "block_start"
-KEY_BLOCK_UNTIL = "block_until"
 
 
 P = ParamSpec("P")
@@ -35,6 +32,13 @@ class BreakerError(Exception):
             self.__cause__ = cause
 
 
+@dataclass
+class _State:
+    failures: int = 0
+    block_start: datetime | None = None
+    block_until: datetime | None = None
+
+
 class CircuitBreaker:
     def __init__(
         self,
@@ -54,11 +58,7 @@ class CircuitBreaker:
         self.triggers_on = triggers_on
 
     def __call__(self, func: CallableWithMeta[P, R_co]) -> CallableWithMeta[P, R_co]:
-        state: dict[str, Any] = {
-            KEY_FAILURES: 0,
-            KEY_BLOCK_START: None,
-            KEY_BLOCK_UNTIL: None,
-        }
+        state = _State()
 
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_co:
@@ -69,43 +69,36 @@ class CircuitBreaker:
                 self.__handle_exception(state, e, func)
                 raise
             else:
-                state[KEY_FAILURES] = 0
+                state.failures = 0
                 return result
 
         return wrapper
 
-    def __check_blocked_state(self, state: dict[str, Any], func: Any) -> None:
-        block_until = state[KEY_BLOCK_UNTIL]
-        if block_until is None:
+    def __check_blocked_state(self, state: _State, func: Any) -> None:
+        if state.block_until is None:
             return
 
         now = datetime.now(UTC)
-        if now < block_until:
-            block_start = state[KEY_BLOCK_START]
-            if block_start is None:
+        if now < state.block_until:
+            if state.block_start is None:
                 raise RuntimeError(INTERNAL_ERROR_MSG)
             raise BreakerError(
                 func_name=f"{func.__module__}.{func.__name__}",
-                block_time=block_start,
+                block_time=state.block_start,
                 cause=None,
             )
-        state[KEY_BLOCK_UNTIL] = None
-        state[KEY_BLOCK_START] = None
-        state[KEY_FAILURES] = 0
+        state.block_until = None
+        state.block_start = None
+        state.failures = 0
 
-    def __handle_exception(
-        self,
-        state: dict[str, Any],
-        exception: Exception,
-        func: Any,
-    ) -> None:
+    def __handle_exception(self, state: _State, exception: Exception, func: Any) -> None:
         if not isinstance(exception, self.triggers_on):
             return
-        state[KEY_FAILURES] += 1
-        if state[KEY_FAILURES] >= self.critical_count:
+        state.failures += 1
+        if state.failures >= self.critical_count:
             block_start = datetime.now(UTC)
-            state[KEY_BLOCK_START] = block_start
-            state[KEY_BLOCK_UNTIL] = block_start + timedelta(seconds=self.time_to_recover)
+            state.block_start = block_start
+            state.block_until = block_start + timedelta(seconds=self.time_to_recover)
             raise BreakerError(
                 func_name=f"{func.__module__}.{func.__name__}",
                 block_time=block_start,
