@@ -354,14 +354,11 @@ COMMAND_HANDLERS = {
 
 def run_repl() -> None:
     while True:
-        try:
-            cmd_line = input().strip()
-        except EOFError:
-            break
+        cmd_line = input().strip()
         if not cmd_line:
-            continue
+            break
         parts = cmd_line.split()
-        command = parts[0].lower() if parts else ""
+        command = parts[0].lower()
         handler = COMMAND_HANDLERS.get(command, unknown_command)
         handler(parts)
 
