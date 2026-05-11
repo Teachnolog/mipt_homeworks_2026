@@ -24,12 +24,10 @@ class CallableWithMeta(Protocol[P, R_co]):
 
 
 class BreakerError(Exception):
-    def __init__(self, func_name: str, block_time: datetime, cause: Exception | None = None) -> None:
+    def __init__(self, func_name: str, block_time: datetime) -> None:
         super().__init__(TOO_MUCH)
         self.func_name = func_name
         self.block_time = block_time
-        if cause is not None:
-            self.__cause__ = cause
 
 
 @dataclass
@@ -85,7 +83,6 @@ class CircuitBreaker:
             raise BreakerError(
                 func_name=f"{func.__module__}.{func.__name__}",
                 block_time=state.block_start,
-                cause=None,
             )
         state.block_until = None
         state.block_start = None
@@ -102,7 +99,6 @@ class CircuitBreaker:
             raise BreakerError(
                 func_name=f"{func.__module__}.{func.__name__}",
                 block_time=block_start,
-                cause=exception,
             ) from exception
 
 
